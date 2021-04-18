@@ -1,0 +1,14 @@
+# general
+.DS_Store
+.idea
+*.log
+tmp/
+
+# python
+*.py[cod]
+*.egg
+build
+htmlcov
+
+# anki
+anki_base_dir/
