@@ -74,8 +74,8 @@ def custom_unbury_cards(*args, **kargs) -> None:
 
 
 def marker_main(*args, **kargs) -> None:
-    custom_unbury_cards()
     custom_bury_cards()
+    custom_unbury_cards()
 
 
 gui_hooks.add_cards_did_add_note.append(marker_main)
