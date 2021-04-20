@@ -49,22 +49,24 @@ def remove_mark_tags(note, tags: list) -> None:
             continue
         if REGEX_TAG.search(tag):
             note.delTag(tag)
-        # TODO: remove after lucas use it
-        if re.search(r'^z\.lucas', tag):
-            note.delTag(tag)
 
 
 def custom_bury_cards(*args, **kargs) -> None:
-    ids = mw.col.find_notes("is:new -is:suspended added:1")
+    ids = mw.col.find_cards("is:new -is:suspended added:1")
     mw.col.sched.suspendCards(ids)
-    mw.col.tags.bulkAdd(ids, marker_tag())
+    for i in ids:
+        card = mw.col.getCard(i)
+        note = card.note()
+        note.addTag(marker_tag())
+        note.flush()
     mw.reset()
 
 
 def custom_unbury_cards(*args, **kargs) -> None:
     ids = mw.col.find_cards(f'tag:"{MARKER_TAG_BASE}*"')
-    for id in ids:
-        card = mw.col.getCard(id)
+    mw.col.sched.unsuspendCards(ids)
+    for i in ids:
+        card = mw.col.getCard(i)
         note = card.note()
         remove_mark_tags(note, note.tags)
         note.flush()
@@ -72,13 +74,13 @@ def custom_unbury_cards(*args, **kargs) -> None:
 
 
 def marker_main(*args, **kargs) -> None:
-    custom_bury_cards()
     custom_unbury_cards()
+    custom_bury_cards()
 
 
 gui_hooks.add_cards_did_add_note.append(marker_main)
 # create a new menu item, "Organizar Cartões"
-action = QAction("Organizar Cartões", mw)
+action = QAction("Hide new cards until next day", mw)
 # set it to call testFunction when it's clicked
 qconnect(action.triggered, marker_main)
 # and add it to the tools menu
