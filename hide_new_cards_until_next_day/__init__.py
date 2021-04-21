@@ -64,12 +64,17 @@ def custom_bury_cards(*args, **kargs) -> None:
 
 def custom_unbury_cards(*args, **kargs) -> None:
     ids = mw.col.find_cards(f'tag:"{MARKER_TAG_BASE}*"')
-    mw.col.sched.unsuspendCards(ids)
     for i in ids:
         card = mw.col.getCard(i)
         note = card.note()
         remove_mark_tags(note, note.tags)
         note.flush()
+        suspend_note = True
+        for tag in note.tags:
+            if is_marker_tag_from_today(tag):
+                suspend_note = False
+        if suspend_note:
+            mw.col.sched.unsuspendCards([i])
     mw.reset()
 
 
@@ -78,7 +83,9 @@ def marker_main(*args, **kargs) -> None:
     custom_unbury_cards()
 
 
+# hooks to automatically execute
 gui_hooks.add_cards_did_add_note.append(marker_main)
+gui_hooks.main_window_did_init.append(marker_main)
 # create a new menu item, "Organizar Cartões"
 action = QAction("Hide new cards until next day", mw)
 # set it to call testFunction when it's clicked
