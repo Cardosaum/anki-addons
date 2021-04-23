@@ -1,1 +1,1 @@
-# [Addon Page](https://ankiweb.net/shared/info/1999327581)
+/home/matheus/git/Cardosaum/anki-addons/hide_new_cards_until_next_day/config.md
