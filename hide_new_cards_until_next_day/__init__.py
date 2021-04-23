@@ -18,6 +18,7 @@ from time import time_ns
 import re
 from pathlib import Path
 import json
+from anki.tags import TagManager
 
 
 # Load config file
@@ -50,65 +51,66 @@ def marker_tag() -> str:
     return f'{MARKER_TAG_BASE}{marker_today().strftime("%Y-%m-%d")}'
 
 
-def is_marker_tag_from_today(tag: str) -> bool:
-    if tag != marker_tag():
-        return False
-    return True
+def suspend_cards(*args, **kargs) -> None:
+    added_today_only = kargs.get('added_today_only', False)
+    if added_today_only:
+        desired_cids = mw.col.find_cards("is:new -is:suspended added:1")
+    else:
+        desired_cids = mw.col.find_cards("is:new -is:suspended")
+    if desired_cids:
+        mw.col.sched.suspendCards(desired_cids)
+    desired_nids = get_ids_to_suspend(added_today_only, 'notes')
+    if desired_nids:
+        mw.col.tags.bulk_update(desired_nids, ' '.join(get_tags_to_remove()), '', False)
+        mw.col.tags.bulk_add(desired_nids, marker_tag())
 
-
-def remove_mark_tags(note, tags: list) -> None:
-    d = datetime.fromtimestamp(note.id//10**3)
-    d = datetime(d.year, d.month, d.day, 0)
-    for tag in tags:
-        tagMO = REGEX_TAG.search(tag)
-        if not tagMO:
-            continue
-        note.delTag(tag)
-
-
-def bury_cards_all(*args, **kargs) -> None:
-    ids = mw.col.find_cards("is:new -is:suspended")
-    mw.col.sched.suspendCards(ids)
-    for i in ids:
-        card = mw.col.getCard(i)
-        note = card.note()
-        note.addTag(marker_tag())
-        note.flush()
+    # get rid of marker tags for all those other cards that doesn't need
+    needed = set(get_ids_to_suspend(added_today_only, 'notes'))
+    unneeded = set(mw.col.find_notes(f'tag:"{MARKER_TAG_BASE}*"'))
+    diff = list(unneeded - needed)
+    mw.col.tags.bulk_update(diff, ' '.join([x for x in mw.col.tags.all() if REGEX_TAG.search(x)]), '', False)
     mw.reset()
 
 
-def bury_cards_today(*args, **kargs) -> None:
-    ids = mw.col.find_cards("is:new -is:suspended added:1")
-    mw.col.sched.suspendCards(ids)
-    for i in ids:
-        card = mw.col.getCard(i)
-        note = card.note()
-        note.addTag(marker_tag())
-        note.flush()
+def unsuspend_cards(*args, **kargs) -> None:
+    # unsuspend all the cards with the custom marker
+    # we don't need to worry about which exactly need
+    # to be marked/unmarked because we handle this in
+    # the suspend_cards function
+    desired_cids = mw.col.find_cards(f'tag:"{MARKER_TAG_BASE}*"')
+    if desired_cids:
+        mw.col.sched.unsuspendCards(desired_cids)
+
+    # remove all the marker tags
+    added_today_only = kargs.get('added_today_only', False)
+    desired_nids = get_ids_to_suspend(added_today_only, 'notes')
+    if desired_nids:
+        mw.col.tags.bulk_update(desired_nids, ' '.join(get_tags_to_remove()), '', False)
     mw.reset()
 
 
-def unbury_cards(*args, **kargs) -> None:
-    ids = mw.col.find_cards(f'tag:"{MARKER_TAG_BASE}*"')
-    for i in ids:
-        card = mw.col.getCard(i)
-        note = card.note()
-        remove_mark_tags(note, note.tags)
-        note.flush()
-        unsuspend_note = True
-        added_today_only = kargs.get('added_today_only', False)
-        for tag in note.tags:
-            if is_marker_tag_from_today(tag) and added_today_only:
-                unsuspend_note = False
-        if unsuspend_note:
-            mw.col.sched.unsuspendCards([i])
-    mw.reset()
+def get_tags_to_remove() -> list:
+    all_tags = mw.col.tags.all()
+    return [x for x in all_tags if REGEX_TAG.search(x) and x != marker_tag()]
+
+
+def get_ids_to_suspend(added_today_only: bool, note_or_card: str) -> list:
+    if added_today_only:
+        d = datetime.fromtimestamp(time_ns()//10**9)
+        d = int(int(datetime(d.year, d.month, d.day, 0).timestamp()) * 10**3)
+        ids = mw.col.db.all(f"select {note_or_card}.id from cards join notes on cards.nid = notes.id where (cards.type = 0 or cards.queue = 0) and notes.id >= {d}")
+    else:
+        ids = mw.col.db.all(f"select {note_or_card}.id from cards join notes on cards.nid = notes.id where (cards.type = 0 or cards.queue = 0)")
+
+    if ids:
+        ids = [int(x[0]) for x in ids]
+    return ids
 
 
 def marker_main(*args, **kargs) -> None:
-    if args:
+    try:
         config_added_today_only = json.loads(args[0]).get('added_today_only', 'somethin_else')
-    else:
+    except Exception:
         config_added_today_only = handle_config().get('added_today_only', 'something_else')
 
     if config_added_today_only == 'something_else':
@@ -116,11 +118,8 @@ def marker_main(*args, **kargs) -> None:
     elif config_added_today_only not in [True, False]:
         raise ValueError(f'the key "added_today_only" must be either "true" or "false", but found {config_added_today_only}')
 
-    unbury_cards(added_today_only=config_added_today_only)
-    if config_added_today_only:
-        bury_cards_today()
-    else:
-        bury_cards_all()
+    unsuspend_cards(added_today_only=config_added_today_only)
+    suspend_cards(added_today_only=config_added_today_only)
     if args:
         return args[0]
 
