@@ -1,24 +1,13 @@
 #!/usr/bin/env python
-
-# import the main window object (mw) from aqt
 from aqt import mw
-# import all of the Qt GUI library
-from aqt.qt import *
-# import hooks
-from anki.hooks import addHook
-from aqt.utils import getText, showInfo
-from anki.lang import _
-# import the "show info" tool from utils.py
-from aqt.utils import showInfo, qconnect
-from anki import Collection
-
+from aqt.utils import qconnect
+from aqt.qt import QAction
 from aqt import gui_hooks
 from datetime import datetime
 from time import time_ns
-import re
+from re import compile
 from pathlib import Path
-import json
-from anki.tags import TagManager
+from json import (dumps, loads)
 
 
 # Load config file
@@ -30,15 +19,18 @@ def handle_config() -> dict:
         }
         mw.addonManager.writeConfig(__name__, config)
         config_path = Path(mw.addonManager._addonMetaPath(__name__)).parent.absolute().joinpath('config.json')
-        config_path.write_text(json.dumps(config))
+        config_path.write_text(dumps(config))
     return config
 
 
 # We're going to add a menu item below. First we want to create a function to
 # be called when the menu item is activated.
 MARKER_SEP = '_'
-MARKER_TAG_BASE = 'zTagHidden' + MARKER_SEP
-REGEX_TAG = re.compile(f'^{MARKER_TAG_BASE}')
+MARKER_TAG_BASE = 'ø::hide_new_cards_until_next_day'
+MARKER_TAG_HIDDEN = MARKER_TAG_BASE + '::hidden_at::'
+MARKER_TAG_REDEEM = MARKER_TAG_BASE + '::redeem_at::'
+REGEX_TAG = compile(f'^{MARKER_TAG_HIDDEN}' + r'\d{4}-\d{,2}-\d{,2}$')
+REGEX_TAG_REDEEM = compile(f'^{MARKER_TAG_REDEEM}' + r'\d{4}-\d{,2}-\d{,2}$')
 
 
 def marker_today():
@@ -47,69 +39,98 @@ def marker_today():
     return d
 
 
+def marker_yesterday():
+    d = datetime.fromtimestamp(time_ns()//10**9)
+    d = datetime(d.year, d.month, d.day-1, 0)
+    return d
+
+
+def marker_n(n: int):
+    d = datetime.fromtimestamp(time_ns()//10**9)
+    d = datetime(d.year, d.month, d.day + n, 0)
+    return d
+
+
 def marker_tag() -> str:
-    return f'{MARKER_TAG_BASE}{marker_today().strftime("%Y-%m-%d")}'
+    return f'{MARKER_TAG_HIDDEN}{marker_today().strftime("%Y-%m-%d")}'
 
 
-def suspend_cards(*args, **kargs) -> None:
+def marker_tag_yesterday() -> str:
+    return f'{MARKER_TAG_BASE}{marker_yesterday().strftime("%Y-%m-%d")}'
+
+
+def marker_tag_n(n: int) -> str:
+    return f'{MARKER_TAG_REDEEM}{marker_n(n).strftime("%Y-%m-%d")}'
+
+
+def suspend_cards_v2(*args, **kargs) -> None:
     added_today_only = kargs.get('added_today_only', False)
+    search = f'is:new -is:buried -is:suspended -tag:"{MARKER_TAG_REDEEM}*"'
     if added_today_only:
-        desired_cids = mw.col.find_cards("is:new -is:suspended added:1")
-    else:
-        desired_cids = mw.col.find_cards("is:new -is:suspended")
-    if desired_cids:
-        mw.col.sched.suspendCards(desired_cids)
-    desired_nids = get_ids_to_suspend(added_today_only, 'notes')
-    if desired_nids:
-        mw.col.tags.bulk_update(desired_nids, ' '.join(get_tags_to_remove()), '', False)
-        mw.col.tags.bulk_add(desired_nids, marker_tag())
+        search += ' added:1'
 
-    # get rid of marker tags for all those other cards that doesn't need
-    needed = set(get_ids_to_suspend(added_today_only, 'notes'))
-    unneeded = set(mw.col.find_notes(f'tag:"{MARKER_TAG_BASE}*"'))
-    diff = list(unneeded - needed)
-    mw.col.tags.bulk_update(diff, ' '.join([x for x in mw.col.tags.all() if REGEX_TAG.search(x)]), '', False)
+    cids = mw.col.find_cards(search)
+    nids = mw.col.find_notes(search)
+
+    # suspend all cards that are new
+    # (either only from today or all new cards)
+    if cids:
+        mw.col.sched.suspendCards(cids)
+
+    # get the note id of this cards
+    # and add a new marker tag from today
+    # and a redeem tag for tomorrow
+    if nids:
+        mw.col.tags.bulk_add(nids, ' '.join([marker_tag(), marker_tag_n(1)]))
+
+    # remove unneded tags
+    marker_tags = [x for x in mw.col.tags.all() if REGEX_TAG.search(x) and x != marker_tag()]
+    if marker_tags:
+        tags_search = ' or '.join([f'tag:"{x}"' for x in marker_tags])
+        nids_tags_to_remove = mw.col.find_notes(tags_search)
+        if nids_tags_to_remove:
+            mw.col.tags.bulk_update(nids_tags_to_remove, ' '.join(marker_tags), '', False)
     mw.reset()
 
 
-def unsuspend_cards(*args, **kargs) -> None:
-    # unsuspend all the cards with the custom marker
-    # we don't need to worry about which exactly need
-    # to be marked/unmarked because we handle this in
-    # the suspend_cards function
-    desired_cids = mw.col.find_cards(f'tag:"{MARKER_TAG_BASE}*"')
-    if desired_cids:
-        mw.col.sched.unsuspendCards(desired_cids)
+def is_redeem_tag_expired(tag: str) -> bool:
+    tag = tag.strip().removeprefix(MARKER_TAG_REDEEM)
+    d = datetime.strptime(tag, '%Y-%m-%d')
+    if (datetime.now() - d).days >= 0:
+        return True
+    return False
 
-    # remove all the marker tags
+
+def unsuspend_cards_v2(*args, **kargs) -> None:
+    # unsuspend all cards whose redeem date has expired
     added_today_only = kargs.get('added_today_only', False)
-    desired_nids = get_ids_to_suspend(added_today_only, 'notes')
-    if desired_nids:
-        mw.col.tags.bulk_update(desired_nids, ' '.join(get_tags_to_remove()), '', False)
-    mw.reset()
-
-
-def get_tags_to_remove() -> list:
-    all_tags = mw.col.tags.all()
-    return [x for x in all_tags if REGEX_TAG.search(x) and x != marker_tag()]
-
-
-def get_ids_to_suspend(added_today_only: bool, note_or_card: str) -> list:
     if added_today_only:
-        d = datetime.fromtimestamp(time_ns()//10**9)
-        d = int(int(datetime(d.year, d.month, d.day, 0).timestamp()) * 10**3)
-        ids = mw.col.db.all(f"select {note_or_card}.id from cards join notes on cards.nid = notes.id where (cards.type = 0 or cards.queue = 0) and notes.id >= {d}")
+        redeem_tags = [x for x in mw.col.tags.all() if REGEX_TAG_REDEEM.search(x)]
     else:
-        ids = mw.col.db.all(f"select {note_or_card}.id from cards join notes on cards.nid = notes.id where (cards.type = 0 or cards.queue = 0)")
+        redeem_tags = [x for x in mw.col.tags.all() if REGEX_TAG_REDEEM.search(x) and is_redeem_tag_expired(x)]
 
-    if ids:
-        ids = [int(x[0]) for x in ids]
-    return ids
+    if redeem_tags:
+        tags_search = ' or '.join([f'tag:"{x}"' for x in redeem_tags])
+    else:
+        return
+
+    if added_today_only:
+        tags_search = f'({tags_search}) -added:1'
+
+    cids = mw.col.find_cards(tags_search)
+    if cids:
+        mw.col.sched.unsuspendCards(cids)
+
+    # remove unneeded mark tags
+    nids = mw.col.find_notes(tags_search)
+    if nids:
+        mw.col.tags.bulk_update(nids, f'{marker_tag()} {" ".join(redeem_tags)} {" ".join([x for x in mw.col.tags.all() if REGEX_TAG.search(x)])}', '', False)
+    mw.reset()
 
 
 def marker_main(*args, **kargs) -> None:
     try:
-        config_added_today_only = json.loads(args[0]).get('added_today_only', 'somethin_else')
+        config_added_today_only = loads(args[0]).get('added_today_only', 'somethin_else')
     except Exception:
         config_added_today_only = handle_config().get('added_today_only', 'something_else')
 
@@ -118,8 +139,8 @@ def marker_main(*args, **kargs) -> None:
     elif config_added_today_only not in [True, False]:
         raise ValueError(f'the key "added_today_only" must be either "true" or "false", but found {config_added_today_only}')
 
-    unsuspend_cards(added_today_only=config_added_today_only)
-    suspend_cards(added_today_only=config_added_today_only)
+    suspend_cards_v2(added_today_only=config_added_today_only)
+    unsuspend_cards_v2(added_today_only=config_added_today_only)
     if args:
         return args[0]
 
@@ -128,9 +149,12 @@ def marker_main(*args, **kargs) -> None:
 gui_hooks.add_cards_did_add_note.append(marker_main)
 gui_hooks.main_window_did_init.append(marker_main)
 gui_hooks.addon_config_editor_will_save_json.append(marker_main)
+
 # create a new menu item, "Organizar Cartões"
 action = QAction("Hide new cards until next day", mw)
+
 # set it to call testFunction when it's clicked
 qconnect(action.triggered, marker_main)
+
 # and add it to the tools menu
 mw.form.menuTools.addAction(action)
