@@ -4,7 +4,7 @@ from aqt.utils import qconnect
 from aqt.qt import QAction
 from aqt import gui_hooks
 from datetime import datetime
-from time import time_ns
+from datetime import timedelta
 from re import compile
 from pathlib import Path
 from json import (dumps, loads)
@@ -34,21 +34,15 @@ REGEX_TAG_REDEEM = compile(f'^{MARKER_TAG_REDEEM}' + r'\d{4}-\d{,2}-\d{,2}$')
 
 
 def marker_today():
-    d = datetime.fromtimestamp(time_ns()//10**9)
-    d = datetime(d.year, d.month, d.day, 0)
-    return d
-
-
-def marker_yesterday():
-    d = datetime.fromtimestamp(time_ns()//10**9)
-    d = datetime(d.year, d.month, d.day-1, 0)
-    return d
+    return datetime.date(datetime.now())
 
 
 def marker_n(n: int):
-    d = datetime.fromtimestamp(time_ns()//10**9)
-    d = datetime(d.year, d.month, d.day + n, 0)
-    return d
+    return marker_today() + timedelta(days=n)
+
+
+def marker_yesterday():
+    return marker_n(-1)
 
 
 def marker_tag() -> str:
