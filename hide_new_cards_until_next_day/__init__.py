@@ -123,18 +123,24 @@ def unsuspend_cards_v2(*args, **kargs) -> None:
 
 
 def marker_main(*args, **kargs) -> None:
+    execute_suspend = True
+    something_else = 'something_else'
     try:
-        config_added_today_only = loads(args[0]).get('added_today_only', 'somethin_else')
+        config_added_today_only = loads(args[0]).get('added_today_only', something_else)
     except Exception:
-        config_added_today_only = handle_config().get('added_today_only', 'something_else')
+        config_added_today_only = handle_config().get('added_today_only', something_else)
 
-    if config_added_today_only == 'something_else':
-        raise ValueError('the key "added_today_only" must be present on config file!')
+    if config_added_today_only == something_else:
+        execute_suspend = False
+        # raise ValueError('the key "added_today_only" must be present on config file!')
     elif config_added_today_only not in [True, False]:
-        raise ValueError(f'the key "added_today_only" must be either "true" or "false", but found {config_added_today_only}')
+        execute_suspend = False
+        # raise ValueError(f'the key "added_today_only" must be either "true" or "false", but found {config_added_today_only}')
 
-    suspend_cards_v2(added_today_only=config_added_today_only)
-    unsuspend_cards_v2(added_today_only=config_added_today_only)
+    if execute_suspend:
+        suspend_cards_v2(added_today_only=config_added_today_only)
+        unsuspend_cards_v2(added_today_only=config_added_today_only)
+
     if args:
         return args[0]
 
