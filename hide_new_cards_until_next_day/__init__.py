@@ -1,36 +1,38 @@
 #!/usr/bin/env python
 from aqt import mw
 from aqt.utils import qconnect
-from aqt.qt import QAction
+from aqt.qt import QAction, QKeySequence
 from aqt import gui_hooks
 from datetime import datetime
 from datetime import timedelta
 from re import compile
 from pathlib import Path
-from json import (dumps, loads)
+from json import dumps, loads
 
 
 # Load config file
 def handle_config() -> dict:
     config = mw.addonManager.getConfig(__name__)
     if not config:
-        config = {
-            'added_today_only': False
-        }
+        config = {"added_today_only": False}
         mw.addonManager.writeConfig(__name__, config)
-        config_path = Path(mw.addonManager._addonMetaPath(__name__)).parent.absolute().joinpath('config.json')
+        config_path = (
+            Path(mw.addonManager._addonMetaPath(__name__))
+            .parent.absolute()
+            .joinpath("config.json")
+        )
         config_path.write_text(dumps(config))
     return config
 
 
 # We're going to add a menu item below. First we want to create a function to
 # be called when the menu item is activated.
-MARKER_SEP = '_'
-MARKER_TAG_BASE = 'ø::hide_new_cards_until_next_day'
-MARKER_TAG_HIDDEN = MARKER_TAG_BASE + '::hidden_at::'
-MARKER_TAG_REDEEM = MARKER_TAG_BASE + '::redeem_at::'
-REGEX_TAG = compile(f'^{MARKER_TAG_HIDDEN}' + r'\d{4}-\d{,2}-\d{,2}$')
-REGEX_TAG_REDEEM = compile(f'^{MARKER_TAG_REDEEM}' + r'\d{4}-\d{,2}-\d{,2}$')
+MARKER_SEP = "_"
+MARKER_TAG_BASE = "ø::hide_new_cards_until_next_day"
+MARKER_TAG_HIDDEN = MARKER_TAG_BASE + "::hidden_at::"
+MARKER_TAG_REDEEM = MARKER_TAG_BASE + "::redeem_at::"
+REGEX_TAG = compile(f"^{MARKER_TAG_HIDDEN}" + r"\d{4}-\d{,2}-\d{,2}$")
+REGEX_TAG_REDEEM = compile(f"^{MARKER_TAG_REDEEM}" + r"\d{4}-\d{,2}-\d{,2}$")
 
 
 def marker_today():
@@ -58,10 +60,10 @@ def marker_tag_n(n: int) -> str:
 
 
 def suspend_cards_v2(*args, **kargs) -> None:
-    added_today_only = kargs.get('added_today_only', False)
+    added_today_only = kargs.get("added_today_only", False)
     search = f'is:new -is:buried -is:suspended -tag:"{MARKER_TAG_REDEEM}*"'
     if added_today_only:
-        search += ' added:1'
+        search += " added:1"
 
     cids = mw.col.find_cards(search)
     nids = mw.col.find_notes(search)
@@ -75,21 +77,25 @@ def suspend_cards_v2(*args, **kargs) -> None:
     # and add a new marker tag from today
     # and a redeem tag for tomorrow
     if nids:
-        mw.col.tags.bulk_add(nids, ' '.join([marker_tag(), marker_tag_n(1)]))
+        mw.col.tags.bulk_add(nids, " ".join([marker_tag(), marker_tag_n(1)]))
 
     # remove unneded tags
-    marker_tags = [x for x in mw.col.tags.all() if REGEX_TAG.search(x) and x != marker_tag()]
+    marker_tags = [
+        x for x in mw.col.tags.all() if REGEX_TAG.search(x) and x != marker_tag()
+    ]
     if marker_tags:
-        tags_search = ' or '.join([f'tag:"{x}"' for x in marker_tags])
+        tags_search = " or ".join([f'tag:"{x}"' for x in marker_tags])
         nids_tags_to_remove = mw.col.find_notes(tags_search)
         if nids_tags_to_remove:
-            mw.col.tags.bulk_update(nids_tags_to_remove, ' '.join(marker_tags), '', False)
+            mw.col.tags.bulk_update(
+                nids_tags_to_remove, " ".join(marker_tags), "", False
+            )
     mw.reset()
 
 
 def is_redeem_tag_expired(tag: str) -> bool:
     tag = tag.strip().removeprefix(MARKER_TAG_REDEEM)
-    d = datetime.strptime(tag, '%Y-%m-%d')
+    d = datetime.strptime(tag, "%Y-%m-%d")
     if (datetime.now() - d).days >= 0:
         return True
     return False
@@ -97,19 +103,23 @@ def is_redeem_tag_expired(tag: str) -> bool:
 
 def unsuspend_cards_v2(*args, **kargs) -> None:
     # unsuspend all cards whose redeem date has expired
-    added_today_only = kargs.get('added_today_only', False)
+    added_today_only = kargs.get("added_today_only", False)
     if added_today_only:
         redeem_tags = [x for x in mw.col.tags.all() if REGEX_TAG_REDEEM.search(x)]
     else:
-        redeem_tags = [x for x in mw.col.tags.all() if REGEX_TAG_REDEEM.search(x) and is_redeem_tag_expired(x)]
+        redeem_tags = [
+            x
+            for x in mw.col.tags.all()
+            if REGEX_TAG_REDEEM.search(x) and is_redeem_tag_expired(x)
+        ]
 
     if redeem_tags:
-        tags_search = ' or '.join([f'tag:"{x}"' for x in redeem_tags])
+        tags_search = " or ".join([f'tag:"{x}"' for x in redeem_tags])
     else:
         return
 
     if added_today_only:
-        tags_search = f'({tags_search}) -added:1'
+        tags_search = f"({tags_search}) -added:1"
 
     cids = mw.col.find_cards(tags_search)
     if cids:
@@ -118,17 +128,28 @@ def unsuspend_cards_v2(*args, **kargs) -> None:
     # remove unneeded mark tags
     nids = mw.col.find_notes(tags_search)
     if nids:
-        mw.col.tags.bulk_update(nids, f'{marker_tag()} {" ".join(redeem_tags)} {" ".join([x for x in mw.col.tags.all() if REGEX_TAG.search(x)])}', '', False)
+        mw.col.tags.bulk_update(
+            nids,
+            f'{marker_tag()} {" ".join(redeem_tags)} {" ".join([x for x in mw.col.tags.all() if REGEX_TAG.search(x)])}',
+            "",
+            False,
+        )
     mw.reset()
 
 
 def marker_main(*args, **kargs) -> None:
+    from pprint import pprint
+
+    pprint(f"ARGS: {args}")
+    pprint(f"KARGS: {kargs}")
     execute_suspend = True
-    something_else = 'something_else'
+    something_else = "something_else"
     try:
-        config_added_today_only = loads(args[0]).get('added_today_only', something_else)
+        config_added_today_only = loads(args[0]).get("added_today_only", something_else)
     except Exception:
-        config_added_today_only = handle_config().get('added_today_only', something_else)
+        config_added_today_only = handle_config().get(
+            "added_today_only", something_else
+        )
 
     if config_added_today_only == something_else:
         execute_suspend = False
@@ -147,11 +168,13 @@ def marker_main(*args, **kargs) -> None:
 
 # hooks to automatically execute
 gui_hooks.add_cards_did_add_note.append(marker_main)
-gui_hooks.main_window_did_init.append(marker_main)
 gui_hooks.addon_config_editor_will_save_json.append(marker_main)
+gui_hooks.main_window_did_init.append(marker_main)
+gui_hooks.profile_will_close.append(marker_main)
 
-# create a new menu item, "Organizar Cartões"
+# create a new menu item
 action = QAction("Hide new cards until next day", mw)
+action.setShortcuts(QKeySequence("Ctrl+Alt+t"))
 
 # set it to call testFunction when it's clicked
 qconnect(action.triggered, marker_main)
