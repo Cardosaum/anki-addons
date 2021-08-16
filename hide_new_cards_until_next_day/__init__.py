@@ -1,13 +1,14 @@
 #!/usr/bin/env python
-from aqt import mw
-from aqt.utils import qconnect
-from aqt.qt import QAction, QKeySequence
+from anki import version as anki_version
 from aqt import gui_hooks
+from aqt import mw
+from aqt.qt import QAction, QKeySequence
+from aqt.utils import qconnect
 from datetime import datetime
 from datetime import timedelta
-from re import compile
-from pathlib import Path
 from json import dumps, loads
+from pathlib import Path
+from re import compile
 
 
 # Load config file
@@ -87,9 +88,13 @@ def suspend_cards_v2(*args, **kargs) -> None:
         tags_search = " or ".join([f'tag:"{x}"' for x in marker_tags])
         nids_tags_to_remove = mw.col.find_notes(tags_search)
         if nids_tags_to_remove:
-            mw.col.tags.bulk_update(
-                nids_tags_to_remove, " ".join(marker_tags), "", False
-            )
+            anki_versions = [int(x) for x in anki_version.strip().split('.')]
+            if anki_versions[0] == 2 and anki_versions[1] >= 1 and anki_versions[2] >= 45:
+                mw.col.tags.bulk_remove(nids_tags_to_remove, " ".join(marker_tags))
+            else:
+                mw.col.tags.bulk_update(
+                    nids_tags_to_remove, " ".join(marker_tags), "", False
+                )
     mw.reset()
 
 
