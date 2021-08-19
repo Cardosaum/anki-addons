@@ -59,6 +59,13 @@ def marker_tag_yesterday() -> str:
 def marker_tag_n(n: int) -> str:
     return f'{MARKER_TAG_REDEEM}{marker_n(n).strftime("%Y-%m-%d")}'
 
+def remove_tags(nids: list, tags: str):
+    anki_versions = [int(x) for x in anki_version.strip().split('.')]
+    if anki_versions[0] == 2 and anki_versions[1] >= 1 and anki_versions[2] >= 45:
+        mw.col.tags.bulk_remove(nids, tags)
+    else:
+        mw.col.tags.bulk_update(nids, tags, "", False)
+
 
 def suspend_cards_v2(*args, **kargs) -> None:
     added_today_only = kargs.get("added_today_only", False)
@@ -88,13 +95,7 @@ def suspend_cards_v2(*args, **kargs) -> None:
         tags_search = " or ".join([f'tag:"{x}"' for x in marker_tags])
         nids_tags_to_remove = mw.col.find_notes(tags_search)
         if nids_tags_to_remove:
-            anki_versions = [int(x) for x in anki_version.strip().split('.')]
-            if anki_versions[0] == 2 and anki_versions[1] >= 1 and anki_versions[2] >= 45:
-                mw.col.tags.bulk_remove(nids_tags_to_remove, " ".join(marker_tags))
-            else:
-                mw.col.tags.bulk_update(
-                    nids_tags_to_remove, " ".join(marker_tags), "", False
-                )
+            remove_tags(nids_tags_to_remove, " ".join(marker_tags))
     mw.reset()
 
 
@@ -133,11 +134,9 @@ def unsuspend_cards_v2(*args, **kargs) -> None:
     # remove unneeded mark tags
     nids = mw.col.find_notes(tags_search)
     if nids:
-        mw.col.tags.bulk_update(
+        remove_tags(
             nids,
-            f'{marker_tag()} {" ".join(redeem_tags)} {" ".join([x for x in mw.col.tags.all() if REGEX_TAG.search(x)])}',
-            "",
-            False,
+            f'{marker_tag()} {" ".join(redeem_tags)} {" ".join([x for x in mw.col.tags.all() if REGEX_TAG.search(x)])}'
         )
     mw.reset()
 
