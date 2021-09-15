@@ -3,7 +3,10 @@
 import cv2
 import dlib
 import math
+from collections import deque
 BLINK_RATIO_THRESHOLD = 5.7
+MEAN = deque()
+MEAN_OPEN = 0
 
 #-----Step 5: Getting to know blink ratio
 
@@ -86,13 +89,26 @@ while True:
         # print(f'{blink_ratio = }')
         # print(f'{lr = }')
         # print('='*80)
-
-        [cv2.circle(frame, (landmarks.part(i).x, landmarks.part(i).y), 1, (255, 255, 255), -1) for i in [*range(36,42), *range(17,22)]]
-        [cv2.circle(frame, (landmarks.part(i).x, landmarks.part(i).y), 1, (255, 255, 255), -1) for i in [*range(42,48), *range(22,27)]]
+        #
+        [cv2.circle(frame, (landmarks.part(i).x, landmarks.part(i).y), 1, (255, 255, 255), -1) for i in range(68)]
+        #
+        # [cv2.circle(frame, (landmarks.part(i).x, landmarks.part(i).y), 1, (255, 255, 255), -1) for i in [*range(36,42), *range(17,22)]]
+        # [cv2.circle(frame, (landmarks.part(i).x, landmarks.part(i).y), 1, (255, 255, 255), -1) for i in [*range(42,48), *range(22,27)]]
         # [cv2.putText(frame, str(i), (landmarks.part(i).x, landmarks.part(i).y), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 1, cv2.LINE_AA) for i in range(68)]
 
-        cv2.putText(frame,f'Left: {lr:.4f}',(10,50), cv2.FONT_HERSHEY_SIMPLEX,
-                    1,(255,255,255),1,cv2.LINE_AA)
+        # if len(MEAN) <= 10:
+        #     MEAN.append(lr)
+        # else:
+        #     MEAN.popleft()
+        #     MEAN.append(lr)
+        #     MEAN_OPEN = sum(MEAN)/len(MEAN)
+
+        # cv2.putText(frame,f'Left: {MEAN_OPEN:.4f}',(10,50), cv2.FONT_HERSHEY_SIMPLEX,
+        #             1,(255,255,255),1,cv2.LINE_AA)
+
+        # if MEAN_OPEN <= 0.94 and len(MEAN) >= 10:
+        #     cv2.putText(frame,f'ERROU!',(10,90), cv2.FONT_HERSHEY_SIMPLEX,
+        #                 2,(255,255,255),1,cv2.LINE_AA)
 
         # if blink_ratio > BLINK_RATIO_THRESHOLD:
         #     #Blink detected! Do Something!
