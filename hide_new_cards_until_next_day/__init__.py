@@ -15,7 +15,10 @@ from re import compile
 def handle_config() -> dict:
     config = mw.addonManager.getConfig(__name__)
     if not config:
-        config = {"added_today_only": False}
+        config = {
+            "added_today_only": False,
+            "hide_when_add": False
+        }
         mw.addonManager.writeConfig(__name__, config)
         config_path = (
             Path(mw.addonManager._addonMetaPath(__name__))
@@ -68,7 +71,7 @@ def remove_tags(nids: list, tags: str):
 
 
 def suspend_cards_v2(*args, **kargs) -> None:
-    added_today_only = kargs.get("added_today_only", False)
+    added_today_only = kargs.get('added_today_only', False)
     search = f'is:new -is:buried -is:suspended -tag:"{MARKER_TAG_REDEEM}*"'
     if added_today_only:
         search += " added:1"
@@ -149,11 +152,9 @@ def marker_main(*args, **kargs) -> None:
     execute_suspend = True
     something_else = "something_else"
     try:
-        config_added_today_only = loads(args[0]).get("added_today_only", something_else)
+        config_added_today_only = loads(args[0]).get('added_today_only', something_else)
     except Exception:
-        config_added_today_only = handle_config().get(
-            "added_today_only", something_else
-        )
+        config_added_today_only = handle_config().get('added_today_only', something_else)
 
     if config_added_today_only == something_else:
         execute_suspend = False
@@ -171,7 +172,9 @@ def marker_main(*args, **kargs) -> None:
 
 
 # hooks to automatically execute
-gui_hooks.add_cards_did_add_note.append(marker_main)
+config_hide_when_add = handle_config().get('hide_when_add', False)
+if config_hide_when_add:
+    gui_hooks.add_cards_did_add_note.append(marker_main)
 gui_hooks.addon_config_editor_will_save_json.append(marker_main)
 gui_hooks.main_window_did_init.append(marker_main)
 gui_hooks.profile_will_close.append(marker_main)
