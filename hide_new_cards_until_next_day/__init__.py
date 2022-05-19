@@ -15,10 +15,7 @@ from re import compile
 def handle_config() -> dict:
     config = mw.addonManager.getConfig(__name__)
     if not config:
-        config = {
-            "added_today_only": False,
-            "hide_when_add": False
-        }
+        config = {"added_today_only": False, "hide_when_add": False}
         mw.addonManager.writeConfig(__name__, config)
         config_path = (
             Path(mw.addonManager._addonMetaPath(__name__))
@@ -62,8 +59,9 @@ def marker_tag_yesterday() -> str:
 def marker_tag_n(n: int) -> str:
     return f'{MARKER_TAG_REDEEM}{marker_n(n).strftime("%Y-%m-%d")}'
 
+
 def remove_tags(nids: list, tags: str):
-    anki_versions = [int(x) for x in anki_version.strip().split('.')]
+    anki_versions = [int(x) for x in anki_version.strip().split(".")]
     if anki_versions[0] == 2 and anki_versions[1] >= 1 and anki_versions[2] >= 45:
         mw.col.tags.bulk_remove(nids, tags)
     else:
@@ -71,7 +69,7 @@ def remove_tags(nids: list, tags: str):
 
 
 def suspend_cards_v2(*args, **kargs) -> None:
-    added_today_only = kargs.get('added_today_only', False)
+    added_today_only = kargs.get("added_today_only", False)
     search = f'is:new -is:buried -is:suspended -tag:"{MARKER_TAG_REDEEM}*"'
     if added_today_only:
         search += " added:1"
@@ -104,11 +102,12 @@ def suspend_cards_v2(*args, **kargs) -> None:
 
 def remove_prefix(text, prefix):
     if text.startswith(prefix):
-        return text[len(prefix):]
+        return text[len(prefix) :]
     return text
 
+
 def is_redeem_tag_expired(tag: str) -> bool:
-    tag = remove_prefix(tag.strip(),MARKER_TAG_REDEEM)
+    tag = remove_prefix(tag.strip(), MARKER_TAG_REDEEM)
     d = datetime.strptime(tag, "%Y-%m-%d")
     if (datetime.now() - d).days >= 0:
         return True
@@ -144,7 +143,7 @@ def unsuspend_cards_v2(*args, **kargs) -> None:
     if nids:
         remove_tags(
             nids,
-            f'{marker_tag()} {" ".join(redeem_tags)} {" ".join([x for x in mw.col.tags.all() if REGEX_TAG.search(x)])}'
+            f'{marker_tag()} {" ".join(redeem_tags)} {" ".join([x for x in mw.col.tags.all() if REGEX_TAG.search(x)])}',
         )
     mw.reset()
 
@@ -157,9 +156,11 @@ def marker_main(*args, **kargs) -> None:
     execute_suspend = True
     something_else = "something_else"
     try:
-        config_added_today_only = loads(args[0]).get('added_today_only', something_else)
+        config_added_today_only = loads(args[0]).get("added_today_only", something_else)
     except Exception:
-        config_added_today_only = handle_config().get('added_today_only', something_else)
+        config_added_today_only = handle_config().get(
+            "added_today_only", something_else
+        )
 
     if config_added_today_only == something_else:
         execute_suspend = False
@@ -177,7 +178,7 @@ def marker_main(*args, **kargs) -> None:
 
 
 # hooks to automatically execute
-config_hide_when_add = handle_config().get('hide_when_add', False)
+config_hide_when_add = handle_config().get("hide_when_add", False)
 if config_hide_when_add:
     gui_hooks.add_cards_did_add_note.append(marker_main)
 gui_hooks.addon_config_editor_will_save_json.append(marker_main)
