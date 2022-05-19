@@ -102,8 +102,13 @@ def suspend_cards_v2(*args, **kargs) -> None:
     mw.reset()
 
 
+def remove_prefix(text, prefix):
+    if text.startswith(prefix):
+        return text[len(prefix):]
+    return text
+
 def is_redeem_tag_expired(tag: str) -> bool:
-    tag = tag.strip().removeprefix(MARKER_TAG_REDEEM)
+    tag = remove_prefix(tag.strip(),MARKER_TAG_REDEEM)
     d = datetime.strptime(tag, "%Y-%m-%d")
     if (datetime.now() - d).days >= 0:
         return True
