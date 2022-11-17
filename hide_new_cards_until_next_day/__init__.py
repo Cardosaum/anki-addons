@@ -187,7 +187,7 @@ gui_hooks.profile_will_close.append(marker_main)
 
 # create a new menu item
 action = QAction("Hide new cards until next day", mw)
-action.setShortcuts(QKeySequence("Ctrl+Alt+t"))
+action.setShortcut(QKeySequence("Ctrl+Alt+t"))
 
 # set it to call testFunction when it's clicked
 qconnect(action.triggered, marker_main)
